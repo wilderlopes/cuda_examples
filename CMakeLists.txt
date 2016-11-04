@@ -4,5 +4,6 @@ find_package(CUDA REQUIRED)
 
 # Specify binary name and source file to build it from
 cuda_add_executable(
-    application_profiling
-    application_profiling.cu)
+    main
+    main.cpp
+    kernelGPU.cu)

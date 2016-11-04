@@ -1,8 +1,9 @@
 #include <cuda.h>
 #include <stdio.h>
+#include <stdlib.h> 
 #include <iostream>
 
-#define THREADS_PER_BLOCK 512
+#define THREADS_PER_BLOCK 32
 
 __global__ void innerProd(float *aa, float *bb, float *cc)
 {
@@ -10,7 +11,7 @@ __global__ void innerProd(float *aa, float *bb, float *cc)
    int index = threadIdx.x + blockIdx.x* blockDim.x;
    temp[threadIdx.x] = aa[index]*bb[index];
 
-   *cc = 0; // Initialized to avoid memory problems. See comments
+   *cc = 8; // Initialized to avoid memory problems. See comments
             // below, next to the free and cudaFree commands.
 
    // No thread goes beyond this point until all of them
@@ -33,45 +34,83 @@ __global__ void innerProd(float *aa, float *bb, float *cc)
 
 }
 
-
-void cuda_function(float *d_a, float *d_b, float *d_c, float *a, float *b, float *c, int NN)
+void cuda_function(float *ainput, float *binput, float *cinput, int NN)
 {
-
+  std::cout << ">>> inside cuda_function " << std::endl;
+  std::cout << "NN = " << NN << "\n";
+  
   #define NUMBER_OF_BLOCKS (NN/THREADS_PER_BLOCK)
-  float GPU_profile;
+  float *d_ainput, *d_binput, *d_cinput;// device copies of a, b, c
+  //float GPU_profile;
   float size = NN * sizeof(float);
 
+  ainput = (float *)malloc(size);
+  binput = (float *)malloc(size);
+  cinput = (float *)malloc(sizeof(float));
+  *cinput = 7;
+
+   for (int i = 0; i < NN; i++) {
+    ainput[i] = 1;
+    binput[i] = 1;
+  }
+
+  std::cout << "a[0] = " << ainput[0] << "\n";
+  std::cout << "b[0] = " << binput[0] << "\n";
+
+
+
+float test = 67.0f;
+
+int retMem = 99;
+int retMalloc = 99;
+
+
+  //std::cout << "size = " << size << "\n";
+
   // ----- Variables to profile the execution time
-  cudaEvent_t start, stop;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
+  //cudaEvent_t start, stop;
+  //cudaEventCreate(&start);
+  //cudaEventCreate(&stop);
 	
   // In the GPU ------------------------------------------
-  cudaMalloc((void**)&d_a, size);
-  cudaMalloc((void**)&d_b, size);
-  cudaMalloc((void**)&d_c, sizeof(float));
+  retMalloc = cudaMalloc((void**)&*d_ainput, 1024*4);
+  cudaMalloc((void**)&d_binput, size);
+  cudaMalloc((void**)&d_cinput, sizeof(float));
 
-  cudaMemcpy(d_a, a, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_b, b, size, cudaMemcpyHostToDevice);
+  cudaMemcpy(d_ainput, ainput, size, cudaMemcpyHostToDevice);
+  cudaMemcpy(d_binput, binput, size, cudaMemcpyHostToDevice);
+  retMem = cudaMemcpy(d_cinput, cinput, sizeof(float), cudaMemcpyHostToDevice);
 
   // Call kernel
-  cudaEventRecord(start);
-  innerProd<<<NUMBER_OF_BLOCKS, THREADS_PER_BLOCK>>>(d_a, d_b, d_c);
-  cudaEventRecord(stop);
+  //cudaEventRecord(start);
+  innerProd<<<NUMBER_OF_BLOCKS, THREADS_PER_BLOCK>>>(d_ainput, d_binput, d_cinput);
+  //cudaEventRecord(stop);
 
-  cudaMemcpy(c, d_c, sizeof(float), cudaMemcpyDeviceToHost);
-  cudaEventSynchronize(stop);
+  cudaMemcpy(cinput, d_cinput, sizeof(float), cudaMemcpyDeviceToHost);
+  //cudaEventSynchronize(stop);
 
   // Elapsed time -- GPU
-  cudaEventElapsedTime(&GPU_profile, start, stop);
+  //cudaEventElapsedTime(&GPU_profile, start, stop);
   // -----------------------------------------------------
 
-  std::cout << "NUMBER_OF_BLOCKS = " << NUMBER_OF_BLOCKS << "\n";
-  std::cout << "c = " << *c << "\n";
-  std::cout << "Kernel execution time in GPU = " << GPU_profile <<
-        " milliseconds" << "\n";
+  std::cout << "retMalloc = " << retMalloc << "\n"; 
+  std::cout << "retMem = " << retMem << "\n";  
+std::cout << "NUMBER_OF_BLOCKS = " << NUMBER_OF_BLOCKS << "\n";
+  std::cout << "c = " << *cinput << "\n";
+ // std::cout << "Kernel execution time in GPU = " << GPU_profile <<
+   //     " milliseconds" << "\n";
 
-  cudaFree(d_a);
-  cudaFree(d_b);
-  cudaFree(d_c);
+
+    std::cout << ">>> Free memory " << "\n";
+   // Remember: free and cudaFree DO NOT ERASE MEMORY! They only
+  // return memory to a pool to be re-allocated. That is why the shared
+  // variable 'cc' is initialized inside the kernel. See this:
+  // http://stackoverflow.com/questions/13100615/cudafree-is-not-freeing-memory
+  //free(ainput);
+  //free(binput);
+  //free(cinput);
+
+  cudaFree(d_ainput);
+  cudaFree(d_binput);
+  cudaFree(d_cinput);
 }
